@@ -35,6 +35,7 @@ class SimpleBinaryClassificationNN(nn.Module):
         self.n_weights = n_weights
         self.layer_names = [name for name in self.layers]
 
+
     def forward(self, x):
         for layer in self.layer_names:
             x = self.layers[layer](x)
@@ -59,4 +60,3 @@ class SimpleBinaryClassificationNN(nn.Module):
                 l2_regularization = l2_regularization + torch.sum(param ** 2) 
         # multiplying L2 loss by a scaling term and dividing by number of weights
         return l2_regularization * self.l2_lambda / self.n_weights
-
