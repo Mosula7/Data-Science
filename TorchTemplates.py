@@ -9,12 +9,12 @@ class SimpleBinaryClassificationNN(nn.Module):
     @classmethod
     def layer_template(self):
         return print("""
-                    {
-                    'input': {'units':[None,None], 'batch_norm': None, 'dropout': None, 'activation': None},
-                    'fcn'  : {'units':[None,None], 'batch_norm': None, 'dropout': None, 'activation': None},
-                    'output':{'units':[None,None], 'batch_norm': None, 'dropout': None, 'activation': None}
-                    }
-                    """)
+{
+'input': {'units':[None,None], 'batch_norm': None, 'dropout': None, 'activation': None},
+'fcn'  : {'units':[None,None], 'batch_norm': None, 'dropout': None, 'activation': None},
+'output':{'units':[None,None], 'batch_norm': None, 'dropout': None, 'activation': None}
+}
+""")
     
     
     def __init__(self,
