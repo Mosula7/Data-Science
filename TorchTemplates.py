@@ -100,6 +100,7 @@ class SimpleBinaryClassificationNN(nn.Module):
         X = X.fillna(0)
 
         if fit_scaler:
+            scaler = scaler()
             X = scaler.fit_transform(X)
             data = TensorDataset(torch.tensor(X).float(), torch.tensor(y.values).reshape(-1,1).float())
             loader = DataLoader(data, batch_size=batch_size, shuffle=shuffle, drop_last=True)
