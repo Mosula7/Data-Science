@@ -28,7 +28,6 @@ class SimpleBinaryClassificationNN(nn.Module):
         super(SimpleBinaryClassificationNN, self).__init__()
         
         self.layers = nn.ModuleDict()
-        self.layer_names = [name for name in self.layers]
 
         self.l1_lambda = l1_lambda
         self.l1_not_applied = l1_not_applied
@@ -66,7 +65,7 @@ class SimpleBinaryClassificationNN(nn.Module):
 
 
     def forward(self, x):
-        for layer in self.layer_names:
+        for layer in self.layers:
             x = self.layers[layer](x)
         return x 
 
