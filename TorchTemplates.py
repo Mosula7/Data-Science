@@ -54,17 +54,15 @@ class SimpleBinaryClassificationNN(nn.Module):
 
         self.scaler = scaler
 
-        n_weights_l1 = 0
+        self.n_weights_l1 = 0
         for name,param in self.named_parameters():
             if not any(x in name for x in self.l1_not_applied):
-                n_weights += param.numel()
-        self.n_weights_l1 = n_weights_l1
-
-        n_weights_l2 = 0
+                self.n_weights_l1 += param.numel()
+        
+        self.n_weights_l2 = 0
         for name,param in self.named_parameters():
             if not any(x in name for x in self.l2_not_applied):
-                n_weights += param.numel()
-        self.n_weights_l2 = n_weights_l2
+                self.n_weights_l2 += param.numel()
 
 
     def forward(self, x):
