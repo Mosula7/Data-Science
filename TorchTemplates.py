@@ -14,7 +14,7 @@ class SimpleBinaryClassificationNN(nn.Module):
 'fcn'  : {'units':[None,None], 'batch_norm': None, 'dropout': None, 'activation': None},
 'output':{'units':[None,None], 'batch_norm': None, 'dropout': None, 'activation': None}
 }
-""", 1)
+""")
     
     def __init__(self,
                  layer_dict: dict,        
