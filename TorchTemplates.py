@@ -143,7 +143,7 @@ class SimpleBinaryClassificationNN(nn.Module):
                 self.train()
 
                 # logging batch performance
-                self.eval_train[epoch].append(float(self.eval_func(y, torch.sigmoid(yHat).detach().numpy())))
+                self.eval_train[epoch].append(float(self.eval_func(y, torch.sigmoid(yHat).detach())))
                 self.losses[epoch].append(loss.detach().item())
                 print(f'batch {i} - {self.eval_metric}: {self.eval_train[epoch][-1]:.3f} | loss: {self.losses[epoch][-1]:.3f}', end = '\r')
 
