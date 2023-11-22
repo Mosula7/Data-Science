@@ -68,7 +68,7 @@ class SimpleBinaryClassificationNN(nn.Module):
     def forward(self, x):
         for layer in self.layer_names:
             x = self.layers[layer](x)
-            return x 
+        return x 
 
 
     def l1_regularization(self): 
