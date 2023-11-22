@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -156,7 +157,7 @@ class SimpleBinaryClassificationNN(nn.Module):
 
             # logging performance
             self.eval_test.append(float(self.eval_func(y, torch.sigmoid(yHat).detach())))
-            print(f'epoch {epoch} - train {self.eval_metric}: {torch.mean(self.eval_train[epoch]):.3f} | test {self.eval_metric}: {self.eval_test[-1]:.3f}')
+            print(f'epoch {epoch} - train {self.eval_metric}: {np.mean(self.eval_train[epoch]):.3f} | test {self.eval_metric}: {self.eval_test[-1]:.3f}')
 
 
             # resetting no improvement counter if the last iteration of the model had the best performance
