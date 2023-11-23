@@ -179,7 +179,6 @@ class SimpleBinaryClassificationNN(nn.Module):
             X = self.scaler.transform(X.fillna(0))
             X = torch.tensor(X).float()
 
-        if type(X) in (torch.utils.data.DataLoader, torch.tensor):
-            self.eval()
-            with torch.no_grad():
-                return torch.sigmoid(self(X)).detach().numpy().reshape(-1)
+        self.eval()
+        with torch.no_grad():
+            return torch.sigmoid(self(X)).detach().numpy().reshape(-1)
