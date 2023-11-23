@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torchmetrics
 
+
 class SimpleBinaryClassificationNN(nn.Module):
     def __init__(self,
                  layer_dict: dict,        
@@ -159,3 +160,16 @@ class SimpleBinaryClassificationNN(nn.Module):
             data = torch.utils.data.TensorDataset(torch.tensor(X).float(), torch.tensor(y.values).reshape(-1,1).float())
             loader = torch.utils.data.DataLoader(data, batch_size=batch_size, shuffle=shuffle)
             return loader
+        
+
+class SimpleRegressionNN(nn.Module):
+    def __init__():
+        pass
+    def forward():
+        pass
+    def l1_regularization():
+        pass
+    def l2_regularization():
+        pass
+    def fit():
+        pass
