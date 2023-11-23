@@ -131,14 +131,9 @@ class SimpleBinaryClassificationNN(nn.Module):
 
     @classmethod
     def layer_template(self) -> None:
-        return print("""
-{
-'input': {'units':[None,None], 'batch_norm': None, 'dropout': None, 'activation': None},
-'fcn'  : {'units':[None,None], 'batch_norm': None, 'dropout': None, 'activation': None},
-'output':{'units':[None,None], 'batch_norm': None, 'dropout': None, 'activation': None}
-}
-""")
-    
+        return "{ 'name': {'units':[None,None], 'batch_norm': None, 'dropout': None, 'activation': None} }"
+
+
     @classmethod
     def make_loader(self, 
                     X: pd.DataFrame, 
