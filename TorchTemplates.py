@@ -4,6 +4,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torchmetrics
+import operator
 
 
 class SimpleBinaryClassificationNN(nn.Module):
@@ -64,7 +65,22 @@ class SimpleBinaryClassificationNN(nn.Module):
                 l2_regularization = l2_regularization + torch.sum(torch.square(param)) 
         # multiplying L2 loss by a scaling term and dividing by number of weights
         return l2_regularization * self.l2_lambda / self.n_weights_l2
-    
+
+
+    def stop(self, objective):
+        if objective == 'min':
+            comp_fn = operator.lt
+        elif objective == 'max':
+            comp_fn = operator.gt
+        # early stop condition check
+        if self.eval_test and comp_fn(max(self.eval_test), self.eval_test[-1]):
+            self.no_imp += 1
+            if self.no_imp == self.early_stop:
+                return True
+        else:
+            self.no_imp = 0
+            return False
+
 
     def forward(self, x):
         for layer in self.layers:
@@ -72,12 +88,13 @@ class SimpleBinaryClassificationNN(nn.Module):
         return x 
         
     
-    def fit(self, lossfun, optimizer, train_loader, test_loader, epochs, early_stop):
+    def fit(self, lossfun, optimizer, train_loader, test_loader, epochs:int, early_stop: int, objective: ('min', 'max')):
         self.eval_train = {}
         self.eval_test = []
         self.losses = {}
         
-        no_imp = 0 # variable for tracking if the eval metric didn't improve 
+        self.early_stop = early_stop
+        self.no_imp = 0 # variable for tracking if the eval metric didn't improve 
         # looping over all the epochs
         for epoch in range(epochs):
             self.train() # switching model back to training mode after evaluating it on the validation set
@@ -117,19 +134,19 @@ class SimpleBinaryClassificationNN(nn.Module):
             print(f'epoch {epoch} - train {self.eval_metric}: {np.mean(self.eval_train[epoch]):.3f} | test {self.eval_metric}: {self.eval_test[-1]:.3f}')
 
             # early stop condition check
-            if self.eval_test and max(self.eval_test) > self.eval_test[-1]:
-                no_imp += 1
-                if no_imp == early_stop:
-                    print(f'no improvement for {early_stop} epochs, early stop')
-                    break
-            else:
-                no_imp = 0
+            if self.stop(objective=objective):
+                print(f'no improvement for {self.no_imp} rounds, early stop')
+                break
 
 
     def predict_proba(self, X: torch.tensor) -> np.array:
         return torch.sigmoid(self(X)).detach().numpy().reshape(-1)
     
-
+    
+    def predict(self, X: torch.tensor) -> np.array:
+        return self(X).detach().numpy().reshape(-1)
+    
+    
     @classmethod
     def layer_template(self) -> None:
         return "{ 'name': {'units':[None,None], 'batch_norm': None, 'dropout': None, 'activation': None} }"
@@ -160,16 +177,3 @@ class SimpleBinaryClassificationNN(nn.Module):
             data = torch.utils.data.TensorDataset(torch.tensor(X).float(), torch.tensor(y.values).reshape(-1,1).float())
             loader = torch.utils.data.DataLoader(data, batch_size=batch_size, shuffle=shuffle)
             return loader
-        
-
-class SimpleRegressionNN(nn.Module):
-    def __init__():
-        pass
-    def forward():
-        pass
-    def l1_regularization():
-        pass
-    def l2_regularization():
-        pass
-    def fit():
-        pass
