@@ -7,7 +7,7 @@ import torchmetrics
 import operator
 
 
-class SimpleBinaryClassificationNN(nn.Module):
+class TabularNN(nn.Module):
     def __init__(self,
                  layer_dict: dict,        
                  l1_lambda: float = None, # L1 regularization term
@@ -15,7 +15,7 @@ class SimpleBinaryClassificationNN(nn.Module):
                  eval_metric: ('AUROC', 'Accuracy') = 'AUROC', # metric to log while training
                  ) -> nn.Module:
         
-        super(SimpleBinaryClassificationNN, self).__init__()
+        super(TabularNN, self).__init__()
         
         self.layers = nn.ModuleDict()
 
