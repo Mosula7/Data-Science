@@ -7,94 +7,170 @@ import torchmetrics
 import operator
 
 
-class TabularNN(nn.Module):
-    def __init__(self,
-                 layer_dict: dict,        
-                 l1_lambda: float = None, # L1 regularization term
-                 l2_lambda: float = None, # L2 regularization term
-                 eval_metric: ('AUROC', 'Accuracy') = 'AUROC', # metric to log while training
-                 ) -> nn.Module:
+def make_loader(X: pd.DataFrame, 
+                y: pd.Series, 
+                batch_size: int = None, 
+                shuffle: bool = True, 
+                imputer: 'sklearn imputer' = None,
+                scaler: 'sklearn scaler' = None) -> torch.utils.data.DataLoader:
         
-        super(TabularNN, self).__init__()
-        
-        self.layers = nn.ModuleDict()
+    if type(X) != pd.DataFrame:
+        return 'Expected X a pd.DataFrame'
+    
+    if not batch_size:
+        batch_size = X.shape[0]
+    
+    if imputer:
+        imputer_func = 'transform' if hasattr(imputer, "n_features_in_") else 'fit_transform'
+        X = imputer.__getattribute__(imputer_func)(X)
+    
+    if scaler:
+        scaler_func = 'transform' if hasattr(scaler, "n_features_in_") else 'fit_transform'
+        X = scaler.__getattribute__(scaler_func)(X)
 
-        self.l1_lambda = l1_lambda
-        self.l2_lambda = l2_lambda
+    data = torch.utils.data.TensorDataset(torch.tensor(X).float(), torch.tensor(y.values).reshape(-1,1).float())
+    loader = torch.utils.data.DataLoader(data, batch_size=batch_size, shuffle=shuffle)
 
-        self.eval_metric = eval_metric
-        self.eval_func = getattr(torchmetrics, eval_metric)(task='binary')
-
-        self.layers = nn.ModuleDict()
-        for key, values in layer_dict.items():
-            self.layers[f'fc_{key}'] = nn.Linear(values['units'][0], values['units'][1])
-
-            if values['batch_norm']:
-                self.layers[f'bn_{key}'] = nn.BatchNorm1d(values['units'][1])
-            if values['dropout']:
-                self.layers[f'do_{key}'] = nn.Dropout(values['dropout'])
-            if values['activation']:
-                self.layers[f'act_{key}'] = getattr(torch.nn, values['activation'])()
-
-        self.n_weights_l1 = 0
-        for name,param in self.named_parameters():
-            if ('weight' in name) and ('bn' not in name):
-                self.n_weights_l1 += param.numel()
-        
-        self.n_weights_l2 = 0
-        for name,param in self.named_parameters():
-            if 'weight' in name:
-                self.n_weights_l2 += param.numel()
+    return loader
 
 
-    def l1_regularization(self): 
-        # summing absolute values of all wights (except biases) to be used during gradient decent
-        l1_regularization = torch.tensor(0., requires_grad=True)
-        for name, param in self.named_parameters():
-            if ('weight' in name) and ('bn' not in name):
-                l1_regularization = l1_regularization + torch.sum(torch.abs(param))
-        # multiplying L2 loss by a scaling term and dividing by number of weights
-        return l1_regularization * self.l1_lambda / self.n_weights_l1
-   
-
-    def l2_regularization(self):
-        # summing squared values of all wights (except biases) to be used during gradient decent 
-        l2_regularization = torch.tensor(0., requires_grad=True)
-        for name, param in self.named_parameters():
-           if ('weight' in name):
-                l2_regularization = l2_regularization + torch.sum(torch.square(param)) 
-        # multiplying L2 loss by a scaling term and dividing by number of weights
-        return l2_regularization * self.l2_lambda / self.n_weights_l2
-
-
-    def stop(self, objective):
-        if objective == 'min':
-            comp_fn = operator.lt
+class EarlyStopping:
+    def __init__(self, early_stop, objective, verbose=True):
+        if objective not in ('min', 'max'):
+            raise ValueError("Expected 'min' or 'max'")
+        elif objective == 'min':
+            self.comp_fn = operator.lt
         elif objective == 'max':
-            comp_fn = operator.gt
-        # early stop condition check
-        if self.eval_test and comp_fn(max(self.eval_test), self.eval_test[-1]):
+            self.comp_fn = operator.gt
+
+        self.verbose = verbose
+        self.early_stop = early_stop
+        self.no_imp = 0
+        
+    def __call__(self, history):
+        if history and self.comp_fn(max(history), history[-1]):
             self.no_imp += 1
+
             if self.no_imp == self.early_stop:
+                if self.verbose:
+                    print(f'no improvement for {self.no_imp} rounds, early stop')
                 return True
+            else:
+                return False
+
         else:
             self.no_imp = 0
             return False
+
+
+class DenseLayer(nn.Module):
+    def __init__(self, 
+            n_inputs: int, 
+            n_output: int, 
+            batchnorm: bool = None, 
+            dropout: float = None, 
+            activation: str = None, 
+            L1: float = None, 
+            L2: float = None
+            ) -> nn.Module:
+        super().__init__()
+
+        # ceating a fully conected linear layer
+        self.linear = nn.Linear(n_inputs, n_output)
+
+        # adding batchnormalization dropout and activation layer if specified
+        if batchnorm:
+            self.batchnorm = nn.BatchNorm1d(n_output)
+        if activation:
+            self.activation = getattr(nn, activation)()
+        if dropout:
+            self.dropout = nn.Dropout(dropout)
+
+        # counting weights which L1 and L2 regularization is applied to 
+        self.n_weights = 0
+        for name,param in self.named_parameters():
+            if ('weight' in name) and ('batchnorm' not in name):
+                self.n_weights += param.numel()
+
+        # saving lambdas
+        self.l1_lambda = L1
+        self.l2_lambda = L2
+
+
+    def forward(self, X):
+        for module in self._modules.values():
+            X = module(X)
+        return X
+
+
+    def l1_regulizer(self):
+        # summing absolute values of all wights (except biases) to be used during gradient decent
+        l1_reg = torch.tensor(0., requires_grad=True)
+        for name, param in self.named_parameters():
+            if ('weight' in name) and ('bn' not in name):
+                l1_reg = l1_reg + torch.sum(torch.abs(param))
+        # multiplying L2 loss by a scaling term and dividing by number of weights
+        return l1_reg * self.l1_lambda / self.n_weights
+    
+
+    def l2_regulizer(self):
+        # summing squared values of all wights (except biases) to be used during gradient decent 
+        l2_reg = torch.tensor(0., requires_grad=True)
+        for name, param in self.named_parameters():
+            if ('weight' in name) and ('bn' not in name):
+                l2_reg = l2_reg + torch.sum(torch.square(param)) 
+        # multiplying L2 loss by a scaling term and dividing by number of weights
+        return l2_reg * self.l2_lambda / self.n_weights
+
+
+class TabularNN(nn.Module):
+    def __init__(self,
+                 layers: dict
+                 ) -> nn.Module:
+        super(TabularNN, self).__init__()
+        
+        # adding layers to a module dict so they are named and organized
+        self.layers = nn.ModuleDict()
+        for name, layer in layers.items():
+            if not isinstance(layer, DenseLayer):
+                raise ValueError("Expected instance of 'DenseLayer'")
+            self.layers[name] = layer
 
 
     def forward(self, x):
         for layer in self.layers:
             x = self.layers[layer](x)
         return x 
+
+    
+    def l1_regularization(self):
+        l1_reg = torch.tensor(0., requires_grad=True)
+        for name, layer in self.layers.items():
+            if layer.l1_lambda:
+                l1_reg = l1_reg + layer.l1_regulizer()
+        return l1_reg
         
     
-    def fit(self, lossfun, optimizer, train_loader, test_loader, epochs:int, early_stop: int, objective: ('min', 'max')):
+    def l2_regularization(self):
+        l2_reg = torch.tensor(0., requires_grad=True)
+        for name, layer in self.layers.items():
+            if layer.l2_lambda:
+                l2_reg = l2_reg + layer.l2_regulizer()
+        return l2_reg
+ 
+
+    def fit(self, 
+            train_loader, test_loader, 
+            epochs:int,
+            lossfun, optimizer, 
+            eval_func, early_stopping, verbose=True):
+        
+        eval_metric = eval_func.__repr__().replace('()', '')
+
         self.eval_train = {}
         self.eval_test = []
         self.losses = {}
-        
-        self.early_stop = early_stop
-        self.no_imp = 0 # variable for tracking if the eval metric didn't improve 
+
         # looping over all the epochs
         for epoch in range(epochs):
             self.train() # switching model back to training mode after evaluating it on the validation set
@@ -118,9 +194,11 @@ class TabularNN(nn.Module):
                 self.train()
 
                 # logging batch performance
-                self.eval_train[epoch].append(float(self.eval_func(torch.sigmoid(yHat).detach(), y)))
+                self.eval_train[epoch].append(float(eval_func(torch.sigmoid(yHat).detach(), y)))
                 self.losses[epoch].append(loss.detach().item())
-                print(f'batch {i} - {self.eval_metric}: {self.eval_train[epoch][-1]:.3f} | loss: {self.losses[epoch][-1]:.3f}', end = '\r')
+
+                if verbose:
+                    print(f'batch {i} {eval_metric}: {self.eval_train[epoch][-1]:.3f} | loss: {self.losses[epoch][-1]:.3f}', end = '\r')
 
         
             # evaluating on the test set
@@ -130,50 +208,13 @@ class TabularNN(nn.Module):
                 yHat = self(X)
 
             # logging performance
-            self.eval_test.append(float(self.eval_func(torch.sigmoid(yHat).detach(), y)))
-            print(f'epoch {epoch} - train {self.eval_metric}: {np.mean(self.eval_train[epoch]):.3f} | test {self.eval_metric}: {self.eval_test[-1]:.3f}')
+            self.eval_test.append(float(eval_func(torch.sigmoid(yHat).detach(), y)))
+            if verbose:
+                print(f'epoch {epoch} {eval_metric} - train: {np.mean(self.eval_train[epoch]):.3f} | test: {self.eval_test[-1]:.3f}')
 
             # early stop condition check
-            if self.stop(objective=objective):
-                print(f'no improvement for {self.no_imp} rounds, early stop')
+            if early_stopping(self.eval_test):
                 break
 
-
-    def predict_proba(self, X: torch.tensor) -> np.array:
-        return torch.sigmoid(self(X)).detach().numpy().reshape(-1)
-    
-    
-    def predict(self, X: torch.tensor) -> np.array:
-        return self(X).detach().numpy().reshape(-1)
-    
-    
-    @classmethod
-    def layer_template(self) -> None:
-        return "{ 'name': {'units':[None,None], 'batch_norm': None, 'dropout': None, 'activation': None} }"
-
-
-    @classmethod
-    def make_loader(self, 
-                    X: pd.DataFrame, 
-                    y: pd.Series, 
-                    batch_size: int, 
-                    shuffle: bool=False, 
-                    fit_scaler: bool=False,
-                    scaler=None) -> torch.utils.data.DataLoader:
-        
-        if type(X) != pd.DataFrame:
-            return 'expected X to be a pd.DataFrame'
-        X = X.fillna(0)
-
-        if fit_scaler:
-            scaler = scaler()
-            X = scaler.fit_transform(X)
-            data = torch.utils.data.TensorDataset(torch.tensor(X).float(), torch.tensor(y.values).reshape(-1,1).float())
-            loader = torch.utils.data.DataLoader(data, batch_size=batch_size, shuffle=shuffle, drop_last=True)
-            return loader, scaler
-
-        elif scaler:
-            X = scaler.transform(X)
-            data = torch.utils.data.TensorDataset(torch.tensor(X).float(), torch.tensor(y.values).reshape(-1,1).float())
-            loader = torch.utils.data.DataLoader(data, batch_size=batch_size, shuffle=shuffle)
-            return loader
+    def predict(self, X: torch.tensor, sigmoid=True) -> np.array:
+        return torch.sigmoid(self(X)).detach().numpy().reshape(-1) if sigmoid else self(X).detach().numpy().reshape(-1)
