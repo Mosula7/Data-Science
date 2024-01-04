@@ -116,6 +116,20 @@ def xy_plot(df:pd.DataFrame, *, x:str, y:str, x_type='cont', y_type = 'cat', fig
       plt.show()
 
 
+def corr_plots(df, figsize=(12,30)):
+    fig, ax = plt.subplots(3, 1, figsize=figsize)
+    sns.heatmap(df.corr(numeric_only=True), annot=True, cmap='Blues', fmt='.2f', mask=np.triu(df.corr(numeric_only=True)), ax=ax[0])
+    ax[0].set_title('Correlation Heatmap', fontsize=16)
+
+    sns.heatmap(df.isna().corr(), annot=True, cmap='Blues', fmt='.2f', mask=np.triu(df.isna().corr()), ax=ax[1])
+    ax[1].set_title('Missing Value Correlation Heatmap', fontsize=16)
+
+
+    sns.heatmap(df.isna().T, cmap='Blues', ax=ax[2])
+    ax[2].axes.xaxis.set_ticklabels([])
+    plt.show()
+
+
 def split_data(df: pd.DataFrame, target: str, test_size: float, 
                val_size: float=None, random_state:int = 0):
     """
