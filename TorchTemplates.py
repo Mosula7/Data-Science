@@ -137,25 +137,34 @@ class TabularNN(nn.Module):
             self.layers[name] = layer
 
 
-    def forward(self, x):
-        for layer in self.layers:
-            x = self.layers[layer](x)
-        return x 
-
-    
-    def l1_regularization(self):
-        l1_reg = torch.tensor(0., requires_grad=True)
+        # saving which layers use which regulizer to not check it every time in the function
+        self.l1_layers = []
         for name, layer in self.layers.items():
             if layer.l1_lambda:
-                l1_reg = l1_reg + layer.l1_regulizer()
+                self.l1_layers.append(name)
+
+        self.l2_layers = []
+        for name, layer in self.layers.items():
+            if layer.l2_lambda:
+                self.l2_layers.append(name)
+
+    def forward(self, x):
+        for layer in self.layers.values():
+            x = layer(x)
+        return x 
+
+  
+    def l1_regularization(self):
+        l1_reg = torch.tensor(0., requires_grad=True)
+        for name in self.l1_layers:
+            l1_reg = l1_reg + self.layers[name].l1_regulizer()
         return l1_reg
         
     
     def l2_regularization(self):
         l2_reg = torch.tensor(0., requires_grad=True)
-        for name, layer in self.layers.items():
-            if layer.l2_lambda:
-                l2_reg = l2_reg + layer.l2_regulizer()
+        for name in self.l2_layers:
+            l2_reg = l2_reg + self.layers[name].l2_regulizer()
         return l2_reg
  
 
