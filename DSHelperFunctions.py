@@ -195,3 +195,51 @@ def classification_predictive_power(y, pred, scoring_func=lambda x: x):
                  Accuracy - {accuracy_score(y, pred>.5):.4f}""", y=.95, fontsize=16)
     plt.show()
 
+
+def objective_lgbm(trial, param_grid, X, y, metrics):   
+    # hyperparams for the model
+    params = {}
+    for key, value in param_grid.items():
+        if isinstance(value, list) or isinstance(tuple, list):
+            params[key] = trial.suggest_categorical(key, value)
+        else:
+            params[key] = value
+    # arrays for metrics
+    auc_array = np.array([])
+    ks_array = np.array([])
+
+    # doing 5 fold stratified cross validation
+    skf = StratifiedKFold(n_splits=5)
+    for i, (train_index, valid_index) in enumerate(skf.split(X=X, y=y)):
+
+        # splitting data
+        X_train = X.iloc[train_index]
+        y_train = y.iloc[train_index]
+
+        X_valid = X.iloc[valid_index]
+        y_valid = y.iloc[valid_index]
+        
+        # initializing, fitting and predicting on validation set
+        lgbm = lgb.LGBMClassifier(**params)
+        lgbm.fit(X_train, y_train, eval_set=[(X_valid, y_valid)])
+        y_pred = lgbm.predict_proba(X_valid)[:,-1]
+
+        # calculating auc
+        auc = roc_auc_score(y_valid, y_pred)
+        auc_array = np.append(auc_array, auc)
+        
+        # calculating ks
+        ks_data = pd.DataFrame({'Target': y_valid, 'Prediction': y_pred})
+       
+        ks = ks_2samp(ks_data.query('Target == 0')['Target'], ks_data.query('Target == 1')['Target'])[0]
+        ks_array = np.append(ks_array, ks)
+
+        # logging results into the dataframe
+        metrics.loc[str(params),f'auc_{i}'] = auc
+        metrics.loc[str(params),f'ks_{i}'] = ks
+      
+    metrics.loc[str(params), f'avg_auc'] = np.mean(auc_array)
+    metrics.loc[str(params), f'avg_ks'] = np.mean(ks_array)
+    
+    #returning main point of interest, auc, for the objective function
+    return np.mean(auc_array)
