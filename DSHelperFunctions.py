@@ -152,47 +152,83 @@ def split_data(df: pd.DataFrame, target: str, test_size: float,
     return X_train, y_train, X_val, y_val, X_test, y_test
 
 
-def classification_predictive_power(y, pred, scoring_func=lambda x: x):
+def classification_predictive_power(y, pred, set_name=None, scoring_func=lambda x: 487.123 + 28.8539 * np.log((1 - x) / x), threshold=0.5):
     """
     makes 4 plots:
     first two plots are PDF and CDF of probabilities or scores (if additional scoring/transformation function is provided)
     the third plot is a confusion matrix and the final plot is a classification report
     the function also calculates KS statistic, AUC and accuracy
     """
+
+    if not set_name:
+        try:
+            callers_local_vars = inspect.currentframe().f_back.f_locals.items()
+            set_name = [var_name for var_name, var_val in callers_local_vars if var_val is pred][0]
+            set_name = set_name.replace('pred_', '').title() + ' Set'
+        except:
+            set_name = 'Set'
+
     title_font_size = 14
     table_cmap = sns.cubehelix_palette(start=2, rot=0, dark=0.2, light=1,as_cmap=True)
-    
-    sns.set_style('whitegrid')
-    fig, ax = plt.subplots(2,2, figsize=(18,14))
+    fig, ax = plt.subplots(2,2, figsize=(14,12))
 
-    #PDF
+    auc = roc_auc_score(y, pred)
+
+
+    # KS
     ks_data = pd.DataFrame({'Target': y, 'prob': pred})
     ks_data['SCORE'] = ks_data['prob'].apply(scoring_func)
     sns.histplot(data=ks_data, x='SCORE', hue='Target',  stat='probability', kde=True, bins=20, common_bins=False, 
                  common_norm=False, palette=['darkorange', 'grey'], ax=ax[0][0], edgecolor='black')
     ax[0][0].set_title('PDF', fontsize=title_font_size)
 
-    #CDF
-    sns.kdeplot(data=ks_data,x='SCORE', hue='Target', cumulative=True, common_norm=False, common_grid=True,
-                palette=['darkorange', 'grey'], ax=ax[0][1])
-    ax[0][1].set_title('CDF', fontsize=title_font_size)
+    fpr, tpr, _ = roc_curve(y, pred)
+    
+    ax[0][1].plot(fpr, tpr, 'orange', label = 'AUC = %0.2f' % auc)
+    ax[0][1].set_title('ROC')
+    
+    ax[0][1].legend(loc = 'lower right')
+    ax[0][1].plot([0, 1], [0, 1], 'grey', linestyle='--')
+    ax[0][1].set_xlim([0, 1])
+    ax[0][1].set_ylim([0, 1])
+    ax[0][1].set_ylabel('True Positive Rate')
+    ax[0][1].set_xlabel('False Positive Rate')
 
     #confusion matrix
-    ConfusionMatrixDisplay.from_predictions(y, pred > 0.5, ax=ax[1][0], cmap=table_cmap)
+    ax[1][0].grid(None)
+    ConfusionMatrixDisplay.from_predictions(y, pred > threshold, ax=ax[1][0], cmap=table_cmap)
     ax[1][0].grid(None)
     ax[1][0].set_title('Confusion Matrix', fontsize=title_font_size)
-
+  
     # classification report
-    cr = pd.DataFrame(itemgetter('0','1')(classification_report(y, pred>.5, output_dict=True))).drop(columns = 'support')
+    cr = pd.DataFrame(itemgetter(*tuple(y.unique().astype('str')))(classification_report(y, pred > threshold, output_dict=True))).drop(columns = 'support')
     sns.heatmap(cr,annot=True,vmax=1,fmt='.5f',ax=ax[1][1],
                 cmap=table_cmap)
     ax[1][1].set_title('Classification Report', fontsize=title_font_size)
-    
+
     # KS, AUC, Accuracy
-    fig.suptitle(f"""\
-                 KS - {ks_2samp(ks_data.query('Target == 0')['SCORE'], ks_data.query('Target == 1')['SCORE'])[0]:.4f}\
-                 AUC - {roc_auc_score(y, pred):.4f}\
-                 Accuracy - {accuracy_score(y, pred>.5):.4f}""", y=.95, fontsize=16)
+    fig.suptitle(f""" {set_name} \n   
+                 KS - {ks_2samp(ks_data.query('Target == 0')['SCORE'], ks_data.query('Target == 1')['SCORE'])[0]:.3f}\
+                 GINI - {2 * auc - 1:.3f}\
+                 Accuracy - {accuracy_score(y, pred>.5):.3f}""", fontsize=16) # y=.95, 
+
+    # formating 
+    for _, spine in ax[1][1].spines.items():
+        spine.set_visible(True)
+
+    cbar = ax[1][1].collections[0].colorbar
+    cbar.outline.set_edgecolor('black')
+    cbar.outline.set_linewidth(0.75)
+
+    ax[0][0].set_axisbelow(True)
+    ax[0][0].yaxis.grid(True, which='major', color='lightgrey', linestyle='-', linewidth=0.5)
+    ax[0][1].set_axisbelow(True)
+    ax[0][1].yaxis.grid(True, which='major', color='lightgrey', linestyle='-', linewidth=0.5)
+
+    ax[0][0].spines[['left', 'right', 'top']].set_visible(False)
+    ax[0][1].spines[['left', 'right', 'top']].set_visible(False)
+    
+    plt.tight_layout()
     plt.show()
 
 
